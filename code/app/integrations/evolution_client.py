@@ -1,46 +1,52 @@
+import asyncio
 import httpx
 from loguru import logger
 from app.config import settings
 
 
-class EvolutionClient:
-    """Cliente para envio de mensagens via Evolution API."""
+class ZAPIClient:
+    """Cliente para envio de mensagens via Z-API."""
 
     def __init__(self):
-        self.base     = settings.evolution_api_url.rstrip("/")
-        self.api_key  = settings.evolution_api_key
-        self.instance = settings.evolution_instance
-        self.headers  = {"apikey": self.api_key, "Content-Type": "application/json"}
+        self.instance_id  = settings.zapi_instance_id
+        self.token        = settings.zapi_token
+        self.base         = f"https://api.z-api.io/instances/{self.instance_id}/token/{self.token}"
+        self.headers      = {
+            "Content-Type": "application/json",
+            "client-token": settings.zapi_client_token,
+        }
 
-    def _jid(self, phone: str) -> str:
-        return phone.replace("@s.whatsapp.net", "").replace("+", "") + "@s.whatsapp.net"
+    def _format_phone(self, phone: str) -> str:
+        """Garante formato correto: apenas dígitos com DDI (5511999999999)."""
+        return (
+            phone
+            .replace("+", "")
+            .replace("-", "")
+            .replace(" ", "")
+            .replace("@s.whatsapp.net", "")
+        )
 
     async def send_text(self, phone: str, text: str) -> bool:
         try:
             async with httpx.AsyncClient(timeout=15) as http:
                 r = await http.post(
-                    f"{self.base}/message/sendText/{self.instance}",
+                    f"{self.base}/send-text",
                     headers=self.headers,
-                    json={"number": self._jid(phone), "text": text},
+                    json={
+                        "phone": self._format_phone(phone),
+                        "message": text,
+                    }
                 )
                 r.raise_for_status()
-                logger.info(f"📤 [{phone}] mensagem enviada")
+                logger.info(f"📤 [{phone}] mensagem enviada via Z-API")
                 return True
         except Exception as e:
-            logger.error(f"send_text error [{phone}]: {e}")
+            logger.error(f"Erro ao enviar mensagem Z-API [{phone}]: {e}")
             return False
 
     async def send_typing(self, phone: str, seconds: int = 2):
-        try:
-            async with httpx.AsyncClient(timeout=8) as http:
-                await http.post(
-                    f"{self.base}/chat/sendPresence/{self.instance}",
-                    headers=self.headers,
-                    json={"number": self._jid(phone), "presence": "composing",
-                          "delay": seconds * 1000},
-                )
-        except Exception:
-            pass  # typing é best-effort
+        """Z-API não tem typing nativo — aguarda brevemente para simular."""
+        await asyncio.sleep(1)
 
 
-evolution_client = EvolutionClient()
+evolution_client = ZAPIClient()

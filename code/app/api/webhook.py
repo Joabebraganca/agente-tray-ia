@@ -6,43 +6,33 @@ from app.agent.agent import run_agent
 router = APIRouter(prefix="/webhook", tags=["webhook"])
 
 
-@router.post("/evolution")
-async def evolution_webhook(request: Request, background_tasks: BackgroundTasks):
-    """Recebe eventos da Evolution API e processa mensagens."""
+@router.post("/zapi")
+async def zapi_webhook(request: Request, background_tasks: BackgroundTasks):
+    """Recebe mensagens da Z-API."""
     try:
         payload = await request.json()
+        logger.debug(f"Webhook Z-API recebido: {payload}")
 
-        # Só processa mensagens recebidas
-        if payload.get("event") != "messages.upsert":
-            return {"status": "ignored"}
-
-        data = payload.get("data", {})
-        key  = data.get("key", {})
-
-        # Ignora mensagens do próprio bot
-        if key.get("fromMe", False):
+        # Ignora mensagens enviadas pelo próprio bot
+        if payload.get("fromMe", False):
             return {"status": "ignored", "reason": "own_message"}
 
-        message = data.get("message", {})
-        phone   = key.get("remoteJid", "").replace("@s.whatsapp.net", "")
+        # Ignora se não for mensagem de texto
+        if payload.get("type") != "ReceivedCallback":
+            return {"status": "ignored", "reason": "not_message"}
 
-        # Suporta texto simples e extended
-        text = (
-            message.get("conversation")
-            or message.get("extendedTextMessage", {}).get("text")
-            or ""
-        ).strip()
+        phone = payload.get("phone", "")
+        text  = payload.get("text", {}).get("message", "").strip()
 
-        if not text or not phone:
+        if not phone or not text:
             return {"status": "ignored", "reason": "no_content"}
 
         logger.info(f"📩 [{phone}]: {text[:100]}")
 
-        # Processa em background — responde ao webhook imediatamente
         background_tasks.add_task(run_agent, phone, text)
 
         return {"status": "received"}
 
     except Exception as e:
-        logger.error(f"Erro no webhook: {e}")
+        logger.error(f"Erro no webhook Z-API: {e}")
         return {"status": "error", "detail": str(e)}

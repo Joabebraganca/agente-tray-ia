@@ -6,10 +6,10 @@ class Settings(BaseSettings):
     openai_api_key: str
     openai_model: str = "gpt-4o-mini"
 
-    # Evolution API
-    evolution_api_url: str
-    evolution_api_key: str
-    evolution_instance: str
+    # Z-API
+    zapi_instance_id: str
+    zapi_token: str
+    zapi_client_token: str
 
     # Tray Commerce
     tray_api_url: str = "https://api.tray.com.br"
